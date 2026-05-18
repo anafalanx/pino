@@ -44,7 +44,8 @@ The current repository contains the initial app scaffold:
 - `internal/launcher/run.go` materializes the embedded runtime and starts the Tcl app.
 - `internal/cli/run.go` and `internal/repo/init.go` remain as early Go experiments for possible future repository logic.
 - `internal/repo/init_test.go` verifies the bootstrap layout.
-- `tcl/app.tcl` is the Tcl/Tk app shell. It opens on the current workspace, can initialize `.pino`, and displays working files.
+- `tcl/app.tcl` is the Tcl/Tk app shell. It opens on the current workspace, can initialize `.pino`, displays working changes, writes SHA-256-addressed objects, and creates JSON snapshot commits.
+- `tcl/vendor/tcllib/` vendors the minimal Tcllib 2.0 SHA-256 and JSON packages required by the app.
 - `tcltk/` contains the committed Tcl/Tk 9.0.3 runtime.
 
 The implemented `.pino` layout is:
@@ -79,7 +80,7 @@ Pino is currently split into three layers:
 
 2. Tcl application layer
 	- Owns the desktop UI.
-	- Starts with workspace selection, repository initialization, file listing, and history placeholders.
+	- Starts with workspace selection, repository initialization, file listing, snapshot commits, and commit history.
 	- Can implement early repository behavior directly while the product shape is still changing.
 
 3. Repository layer

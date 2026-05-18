@@ -9,7 +9,8 @@ Pino is early, but the foundation is in place:
 - Go application shell that embeds the Tcl source and Tcl/Tk runtime into one executable.
 - Repository bootstrap layout under `.pino/`.
 - Project-local Tcl/Tk 9.0.3 runtime committed under `tcltk/` and embedded by the Go shell.
-- Tcl/Tk UI that opens on the current workspace, initializes `.pino`, and shows working files.
+- Tcl/Tk UI that opens on the current workspace, initializes `.pino`, shows changes, and creates the first JSON snapshot commits.
+- Vendored Tcllib 2.0 SHA-256 and JSON packages under `tcl/vendor/tcllib`.
 - Product and architecture design in `docs/design.md`.
 
 ## Run The App
@@ -67,7 +68,7 @@ Pino stores local history in a `.pino/` directory inside the notes folder.
 		main
 ```
 
-The app can currently initialize that layout from the Tcl UI. The design targets content-addressed objects, full-snapshot commit manifests, and atomic ref updates. The first release should make it possible to create snapshots, inspect changes, view history, restore files, and verify repository integrity.
+The app can currently initialize that layout from the Tcl UI and create full snapshot commits. Commit manifests are JSON, file contents are stored as SHA-256-addressed objects, and `refs/main` points to the latest snapshot.
 
 ## Development
 
@@ -78,6 +79,8 @@ go test ./...
 ```
 
 The Tcl/Tk runtime was built from Tcl/Tk 9.0.3 source with MSYS2 UCRT64 tools in `C:\msys64`. The source tree is not required after installation because the runtime artifacts are committed under `tcltk/`.
+
+Pino also vendors a minimal subset of Tcllib 2.0 for pure-Tcl SHA-256 and JSON support. App functionality should not depend on host OS utilities.
 
 ## Design
 

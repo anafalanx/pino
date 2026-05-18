@@ -20,11 +20,13 @@ if (!(Test-Path -LiteralPath $app)) {
 
 $env:PINO_ROOT = $root
 $env:PINO_TCLTK = $runtime
-$env:PINO_WORKSPACE = (Get-Location).Path
+if (!$env:PINO_WORKSPACE) {
+    $env:PINO_WORKSPACE = (Get-Location).Path
+}
 $env:PATH = "$runtimeBin;$env:PATH"
 
 $launcher = $wish
-if ($args -contains "--check") {
+if ($args -contains "--check" -or $args -contains "--repo-check") {
     $launcher = $tclsh
 }
 

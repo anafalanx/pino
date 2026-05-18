@@ -29,14 +29,22 @@ func Run(args []string) error {
 		return err
 	}
 
-	workspace, err := os.Getwd()
+	workspace := os.Getenv("PINO_WORKSPACE")
+	if workspace == "" {
+		var err error
+		workspace, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("get workspace: %w", err)
+		}
+	}
+	workspace, err = filepath.Abs(workspace)
 	if err != nil {
-		return fmt.Errorf("get workspace: %w", err)
+		return fmt.Errorf("resolve workspace: %w", err)
 	}
 
 	runtimeBin := filepath.Join(root, "tcltk", "bin")
 	exeName := "wish90.exe"
-	if hasArg(args, "--check") {
+	if hasArg(args, "--check") || hasArg(args, "--repo-check") {
 		exeName = "tclsh90.exe"
 	}
 
