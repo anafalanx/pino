@@ -1,0 +1,16 @@
+# tcl pkg-config source file
+
+prefix=/m/dev/pino/tcltk
+exec_prefix=/m/dev/pino/tcltk
+libdir=/m/dev/pino/tcltk/lib
+includedir=${prefix}/include
+libfile=libtcl90.dll.a
+
+Name: Tool Command Language
+Description: Tcl is a powerful, easy-to-learn dynamic programming language, suitable for a wide range of uses.
+URL: https://www.tcl-lang.org/
+Version: 9.0.3
+Requires.private: @TCL_PC_REQUIRES_PRIVATE@ zlib >= 1.2.3
+Libs: -L${libdir} -ltcl90 -ltclstub
+Libs.private: 
+Cflags: -I${includedir} @TCL_PC_CFLAGS@
