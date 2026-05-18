@@ -9,7 +9,7 @@ Pino is early, but the foundation is in place:
 - Go application shell that embeds the Tcl source and Tcl/Tk runtime into one executable.
 - Repository bootstrap layout under `.pino/`.
 - Project-local Tcl/Tk 9.0.3 runtime committed under `tcltk/` and embedded by the Go shell.
-- Tcl/Tk UI that opens on the current workspace, initializes `.pino`, shows changes, and creates the first JSON snapshot commits.
+- Tcl/Tk UI that opens on the current workspace, initializes `.pino`, shows changes, creates JSON snapshot commits, and restores a selected file from history.
 - Vendored Tcllib 2.0 SHA-256 and JSON packages under `tcl/vendor/tcllib`.
 - Product and architecture design in `docs/design.md`.
 
@@ -49,6 +49,12 @@ For a smoke test that loads Tcl and Tk without leaving the UI open:
 .\scripts\pino-ui.cmd --check
 ```
 
+For a repository smoke test that verifies file-level restore safety:
+
+```powershell
+.\scripts\pino-ui.cmd --restore-check
+```
+
 PowerShell users can also run:
 
 ```powershell
@@ -86,7 +92,7 @@ Pino stores local history in a `.pino/` directory inside the notes folder.
 		main
 ```
 
-The app can currently initialize that layout from the Tcl UI and create full snapshot commits. Commit manifests are JSON, file contents are stored as SHA-256-addressed objects, and `refs/main` points to the latest snapshot.
+The app can currently initialize that layout from the Tcl UI, create full snapshot commits, and restore one selected file from a historical snapshot. Commit manifests are JSON, file contents are stored as SHA-256-addressed objects, and `refs/main` points to the latest snapshot.
 
 ## Development
 

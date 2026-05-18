@@ -44,7 +44,7 @@ The current repository contains the initial app scaffold:
 - `internal/launcher/run.go` materializes the embedded runtime and starts the Tcl app.
 - `internal/cli/run.go` and `internal/repo/init.go` remain as early Go experiments for possible future repository logic.
 - `internal/repo/init_test.go` verifies the bootstrap layout.
-- `tcl/app.tcl` is the Tcl/Tk app shell. It opens on the current workspace, can initialize `.pino`, displays working changes, writes SHA-256-addressed objects, and creates JSON snapshot commits.
+- `tcl/app.tcl` is the Tcl/Tk app shell. It opens on the current workspace, can initialize `.pino`, displays working changes, writes SHA-256-addressed objects, creates JSON snapshot commits, and restores a selected file from a selected snapshot.
 - `tcl/vendor/tcllib/` vendors the minimal Tcllib 2.0 SHA-256 and JSON packages required by the app.
 - `scripts/pino-gui-check.ps1` launches the real GUI for automated visual checks, captures screenshots, records visible window geometry, and collects stdout, stderr, and Tcl diagnostics.
 - `tcltk/` contains the committed Tcl/Tk 9.0.3 runtime.
@@ -82,6 +82,7 @@ Pino is currently split into three layers:
 2. Tcl application layer
 	- Owns the desktop UI.
 	- Starts with workspace selection, repository initialization, file listing, snapshot commits, and commit history.
+	- Provides the first safe recovery flow by restoring one selected file from a selected history entry.
 	- Can implement early repository behavior directly while the product shape is still changing.
 	- Logs startup and background errors through a diagnostics channel so automation captures failures that would otherwise appear only in Tk dialogs.
 	- Supports `--gui-check` for deterministic GUI verification with a ready marker and clean automated exit.
@@ -239,6 +240,8 @@ Binary files are out of scope for the first version.
 ### `pino restore`
 
 Restores a file or snapshot from history.
+
+Current UI behavior restores a selected file from a selected snapshot and refuses to overwrite local changes. The hidden `--restore-check` path verifies the refusal and forced internal restore path in a temporary workspace.
 
 Initial forms:
 

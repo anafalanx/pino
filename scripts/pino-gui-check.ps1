@@ -37,6 +37,8 @@ $readyPath = Join-Path $OutputDir "ready.txt"
 $windowsPath = Join-Path $OutputDir "windows.txt"
 $screenshotsDir = Join-Path $OutputDir "screenshots"
 New-Item -ItemType Directory -Path $screenshotsDir -Force | Out-Null
+Remove-Item -LiteralPath $stdoutPath, $stderrPath, $diagnosticsPath, $readyPath, $windowsPath -Force -ErrorAction SilentlyContinue
+Remove-Item -Path (Join-Path $screenshotsDir "*.png") -Force -ErrorAction SilentlyContinue
 
 $runtime = Join-Path $root "tcltk"
 $runtimeBin = Join-Path $runtime "bin"
@@ -68,7 +70,8 @@ if ($ExerciseDialogError) {
 
 try {
     Add-Type -AssemblyName System.Drawing.Common
-} catch {
+}
+catch {
     Add-Type -AssemblyName System.Drawing
 }
 $windowCaptureSource = @'
@@ -184,7 +187,8 @@ function Get-SafeFileName {
     foreach ($character in $Value.ToCharArray()) {
         if ($invalid -contains $character) {
             [void]$builder.Append('_')
-        } else {
+        }
+        else {
             [void]$builder.Append($character)
         }
     }
@@ -231,7 +235,8 @@ function Save-WindowScreenshots {
             $graphics.CopyFromScreen($left, $top, 0, 0, [System.Drawing.Size]::new($width, $height))
             $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
             $count++
-        } finally {
+        }
+        finally {
             if ($graphics) { $graphics.Dispose() }
             if ($bitmap) { $bitmap.Dispose() }
         }
@@ -279,7 +284,8 @@ function Test-ScreenshotArtifacts {
             if ($sampledColors.Count -lt $MinimumSampleColors) {
                 throw "Screenshot $($screenshot.Name) appears visually blank: only $($sampledColors.Count) sampled colors"
             }
-        } finally {
+        }
+        finally {
             if ($bitmap) { $bitmap.Dispose() }
         }
     }

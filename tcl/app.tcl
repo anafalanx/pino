@@ -141,8 +141,13 @@ namespace eval ::pino {
 	variable commitMessageVar ""
 	variable changesTree ""
 	variable historyTree ""
+	variable restoreTree ""
 	variable initButton ""
 	variable commitButton ""
+	variable restoreButton ""
+	variable selectedCommitId ""
+	variable restoreCommitVar ""
+	variable restoreFileVar ""
 }
 
 ::pino::requirePackage sha256
@@ -204,6 +209,14 @@ proc ::pino::writeTextFile {path data} {
 	close $handle
 }
 
+proc ::pino::readTextFile {path} {
+	set handle [open $path r]
+	fconfigure $handle -encoding utf-8 -translation lf
+	set data [read $handle]
+	close $handle
+	return $data
+}
+
 proc ::pino::atomicWriteText {path data} {
 	ensureRepoLayout
 	set tmp [file join [tmpDir] "write-[pid]-[clock clicks]-[file tail $path]"]
@@ -222,6 +235,85 @@ proc ::pino::copyObject {absolutePath objectId} {
 	set tmp [file join [tmpDir] "object-[pid]-[clock clicks]-$objectId"]
 	file copy -force $absolutePath $tmp
 	file rename -force $tmp $destination
+}
+
+proc ::pino::safeRelativePath {path} {
+	if {[file pathtype $path] ne "relative"} {
+		return 0
+	}
+	foreach part [file split $path] {
+		if {$part eq "" || $part eq "." || $part eq ".."} {
+			return 0
+		}
+	}
+	return 1
+}
+
+proc ::pino::fileEntryByPath {entries relativePath} {
+	foreach entry $entries {
+		if {[dict get $entry path] eq $relativePath} {
+			return $entry
+		}
+	}
+	return {}
+}
+
+proc ::pino::fileMatchesEntry {absolutePath entry} {
+	if {$entry eq {} || ![file exists $absolutePath] || ![file isfile $absolutePath]} {
+		return 0
+	}
+	if {[file size $absolutePath] ne [dict get $entry size]} {
+		return 0
+	}
+	expr {[::sha2::sha256 -hex -filename $absolutePath] eq [dict get $entry object]}
+}
+
+proc ::pino::hasLocalChangesForPath {relativePath} {
+	variable workspace
+	set headEntry [fileEntryByPath [headFiles] $relativePath]
+	set absolutePath [file join $workspace $relativePath]
+	if {[file exists $absolutePath]} {
+		if {$headEntry eq {}} {
+			return 1
+		}
+		return [expr {![fileMatchesEntry $absolutePath $headEntry]}]
+	}
+	expr {$headEntry ne {}}
+}
+
+proc ::pino::restoreFileFromCommit {commitId relativePath {force 0}} {
+	variable workspace
+	if {![repoExists]} {
+		error "Repository is not initialized"
+	}
+	if {![safeRelativePath $relativePath]} {
+		error "Unsafe restore path: $relativePath"
+	}
+	set commit [readCommit $commitId]
+	if {$commit eq {}} {
+		error "Commit not found: [shortId $commitId]"
+	}
+	set entry [fileEntryByPath [dict get $commit files] $relativePath]
+	if {$entry eq {}} {
+		error "File is not present in snapshot: $relativePath"
+	}
+	if {!$force && [hasLocalChangesForPath $relativePath]} {
+		error "Refusing to overwrite local changes in $relativePath"
+	}
+	set source [objectPath [dict get $entry object]]
+	if {![file exists $source]} {
+		error "Object is missing: [dict get $entry object]"
+	}
+	set destination [file join $workspace $relativePath]
+	if {[file exists $destination] && ![file isfile $destination]} {
+		error "Destination is not a regular file: $relativePath"
+	}
+	ensureRepoLayout
+	file mkdir [file dirname $destination]
+	set tmp [file join [tmpDir] "restore-[pid]-[clock clicks]-[file tail $relativePath]"]
+	file copy -force $source $tmp
+	file rename -force $tmp $destination
+	return $relativePath
 }
 
 proc ::pino::setStatus {message} {
@@ -508,11 +600,14 @@ proc ::pino::refreshChanges {} {
 
 proc ::pino::refreshHistory {} {
 	variable historyTree
+	variable selectedCommitId
 	if {$historyTree eq ""} {
 		return
 	}
 	$historyTree delete [$historyTree children {}]
+	set selectedCommitId ""
 	if {![repoExists]} {
+		refreshRestoreFiles
 		return
 	}
 	set head [headValue]
@@ -530,7 +625,7 @@ proc ::pino::refreshHistory {} {
 			return
 		}
 		set files [dict get $commit files]
-		$historyTree insert {} end -values [list \
+		$historyTree insert {} end -id $head -values [list \
 			[shortId $head] \
 			[dict get $commit created] \
 			[dict get $commit message] \
@@ -538,6 +633,109 @@ proc ::pino::refreshHistory {} {
 		set head [dict get $commit parent]
 		incr count
 	}
+	set first [lindex [$historyTree children {}] 0]
+	if {$first ne ""} {
+		$historyTree selection set $first
+		set selectedCommitId $first
+	}
+	refreshRestoreFiles
+}
+
+proc ::pino::selectHistoryCommit {} {
+	variable historyTree
+	variable selectedCommitId
+	set selection [$historyTree selection]
+	if {[llength $selection] == 0} {
+		set selectedCommitId ""
+	} else {
+		set selectedCommitId [lindex $selection 0]
+	}
+	refreshRestoreFiles
+}
+
+proc ::pino::refreshRestoreFiles {} {
+	variable selectedCommitId
+	variable restoreTree
+	variable restoreButton
+	variable restoreCommitVar
+	variable restoreFileVar
+	set restoreCommitVar ""
+	set restoreFileVar ""
+	if {$restoreTree eq ""} {
+		return
+	}
+	$restoreTree delete [$restoreTree children {}]
+	if {$restoreButton ne ""} {
+		$restoreButton state disabled
+	}
+	if {$selectedCommitId eq ""} {
+		return
+	}
+	set commit [readCommit $selectedCommitId]
+	if {$commit eq {}} {
+		set restoreCommitVar "Missing snapshot [shortId $selectedCommitId]"
+		return
+	}
+	set restoreCommitVar "Snapshot [shortId $selectedCommitId] / [dict get $commit message]"
+	foreach entry [lrange [dict get $commit files] 0 299] {
+		set object [dict get $entry object]
+		$restoreTree insert {} end -values [list \
+			[dict get $entry path] \
+			[dict get $entry size] \
+			[string range $object 0 11]]
+	}
+	if {[llength [dict get $commit files]] > 300} {
+		$restoreTree insert {} end -values [list "[expr {[llength [dict get $commit files]] - 300}] more files" "" ""]
+	}
+	set first [$restoreTree children {}]
+	if {[llength $first] > 0} {
+		$restoreTree selection set [lindex $first 0]
+		selectRestoreFile
+	}
+}
+
+proc ::pino::selectRestoreFile {} {
+	variable restoreTree
+	variable restoreButton
+	variable restoreFileVar
+	set selection [$restoreTree selection]
+	if {[llength $selection] == 0} {
+		set restoreFileVar ""
+		if {$restoreButton ne ""} {
+			$restoreButton state disabled
+		}
+		return
+	}
+	set values [$restoreTree item [lindex $selection 0] -values]
+	set restoreFileVar [lindex $values 0]
+	if {$restoreButton ne "" && [llength $values] == 3 && [lindex $values 1] ne ""} {
+		$restoreButton state !disabled
+	}
+}
+
+proc ::pino::restoreSelectedFile {} {
+	variable selectedCommitId
+	variable restoreFileVar
+	if {$selectedCommitId eq "" || $restoreFileVar eq ""} {
+		setStatus "Select a snapshot file to restore"
+		return
+	}
+	set answer [tk_messageBox \
+		-icon warning \
+		-type yesno \
+		-title "Restore File" \
+		-message "Restore $restoreFileVar from snapshot [shortId $selectedCommitId]?" \
+		-detail "Pino will refuse to overwrite local changes."]
+	if {$answer ne "yes"} {
+		return
+	}
+	if {[catch {restoreFileFromCommit $selectedCommitId $restoreFileVar 0} restored options]} {
+		setStatus $restored
+		showErrorDialog "Restore File" $restored
+		return
+	}
+	refresh
+	setStatus "Restored $restored"
 }
 
 proc ::pino::refresh {} {
@@ -645,6 +843,40 @@ proc ::pino::startGuiAutomation {} {
 	after $guiCheckAutoExitMs ::pino::finishGuiCheck
 }
 
+proc ::pino::runRestoreCheck {} {
+	variable workspace
+	variable commitMessageVar
+	if {![repoExists]} {
+		initRepository
+	}
+	set relativePath "restore-check.txt"
+	set absolutePath [file join $workspace $relativePath]
+	writeTextFile $absolutePath "first\n"
+	set commitMessageVar "Restore check first"
+	set firstCommit [commitSnapshot]
+	if {$firstCommit eq ""} {
+		error "First restore-check commit was not created"
+	}
+	writeTextFile $absolutePath "second\n"
+	set commitMessageVar "Restore check second"
+	set secondCommit [commitSnapshot]
+	if {$secondCommit eq ""} {
+		error "Second restore-check commit was not created"
+	}
+	writeTextFile $absolutePath "dirty\n"
+	if {![catch {restoreFileFromCommit $firstCommit $relativePath 0} result]} {
+		error "Restore unexpectedly overwrote local changes"
+	}
+	restoreFileFromCommit $firstCommit $relativePath 1
+	set restored [readTextFile $absolutePath]
+	if {$restored ne "first\n"} {
+		error "Restore produced unexpected content: $restored"
+	}
+	puts "Pino restore check OK"
+	puts "First $firstCommit"
+	puts "Second $secondCommit"
+}
+
 if {[::pino::hasArg "--check"]} {
 	puts "Pino UI runtime OK"
 	puts "Tcl [info patchlevel]"
@@ -667,6 +899,16 @@ if {[::pino::hasArg "--repo-check"]} {
 		puts "Commit none"
 	} else {
 		puts "Commit $commitId"
+	}
+	destroy .
+	exit 0
+}
+
+if {[::pino::hasArg "--restore-check"]} {
+	if {[catch {::pino::runRestoreCheck} result options]} {
+		::pino::reportError "Restore check" $result $options
+		destroy .
+		exit 1
 	}
 	destroy .
 	exit 0
@@ -765,6 +1007,7 @@ $notebook add $changes -text "Changes"
 set history [ttk::frame $notebook.history -padding 10]
 grid columnconfigure $history 0 -weight 1
 grid rowconfigure $history 0 -weight 1
+grid rowconfigure $history 2 -weight 1
 set ::pino::historyTree [ttk::treeview $history.tree -columns {commit created message files} -show headings -height 14]
 $::pino::historyTree heading commit -text "Commit"
 $::pino::historyTree heading created -text "Created"
@@ -778,7 +1021,39 @@ set historyScroll [ttk::scrollbar $history.scroll -orient vertical -command "$::
 $::pino::historyTree configure -yscrollcommand "$historyScroll set"
 grid $::pino::historyTree -row 0 -column 0 -sticky nsew
 grid $historyScroll -row 0 -column 1 -sticky ns
+bind $::pino::historyTree <<TreeviewSelect>> ::pino::selectHistoryCommit
+
+ttk::label $history.restoreLabel -textvariable ::pino::restoreCommitVar -style Pino.Meta.TLabel
+set ::pino::restoreTree [ttk::treeview $history.restoreTree -columns {path size object} -show headings -height 8]
+$::pino::restoreTree heading path -text "Snapshot File"
+$::pino::restoreTree heading size -text "Size"
+$::pino::restoreTree heading object -text "Object"
+$::pino::restoreTree column path -width 520 -stretch true
+$::pino::restoreTree column size -width 90 -stretch false -anchor e
+$::pino::restoreTree column object -width 120 -stretch false
+set restoreScroll [ttk::scrollbar $history.restoreScroll -orient vertical -command "$::pino::restoreTree yview"]
+$::pino::restoreTree configure -yscrollcommand "$restoreScroll set"
+bind $::pino::restoreTree <<TreeviewSelect>> ::pino::selectRestoreFile
+
+set restoreActions [ttk::frame $history.restoreActions]
+grid columnconfigure $restoreActions 1 -weight 1
+ttk::label $restoreActions.selectedLabel -text "Selected file"
+ttk::entry $restoreActions.selected -textvariable ::pino::restoreFileVar -state readonly
+set ::pino::restoreButton [ttk::button $restoreActions.restore -text "Restore File" -style Pino.Primary.TButton -command ::pino::restoreSelectedFile]
+$::pino::restoreButton state disabled
+grid $restoreActions.selectedLabel -row 0 -column 0 -sticky w -padx {0 8}
+grid $restoreActions.selected -row 0 -column 1 -sticky ew -padx {0 8}
+grid $restoreActions.restore -row 0 -column 2 -sticky e
+
+grid $history.restoreLabel -row 1 -column 0 -columnspan 2 -sticky w -pady {12 4}
+grid $::pino::restoreTree -row 2 -column 0 -sticky nsew
+grid $restoreScroll -row 2 -column 1 -sticky ns
+grid $restoreActions -row 3 -column 0 -columnspan 2 -sticky ew -pady {8 0}
 $notebook add $history -text "History"
+
+if {[::pino::hasArg "--gui-check"] && [::pino::repoExists] && [::pino::headValue] ne ""} {
+	$notebook select $history
+}
 
 grid $main.title -row 0 -column 0 -sticky w
 grid $main.status -row 0 -column 0 -sticky e

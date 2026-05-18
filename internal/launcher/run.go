@@ -44,7 +44,7 @@ func Run(args []string) error {
 
 	runtimeBin := filepath.Join(root, "tcltk", "bin")
 	exeName := "wish90.exe"
-	if hasArg(args, "--check") || hasArg(args, "--repo-check") || hasArg(args, "--gui-check") {
+	if hasArg(args, "--check") || hasArg(args, "--repo-check") || hasArg(args, "--restore-check") || hasArg(args, "--gui-check") {
 		exeName = "tclsh90.exe"
 	}
 
