@@ -1,25 +1,79 @@
 # Pino
 
-Pino is a local-first plain-text version control system for notes.
+Pino is a local-first plain-text version control system for notes. It is aimed at writers who want durable snapshots, simple history, and safe restore without needing to operate a full software-development VCS.
 
-## Goals
-- Never lose writing.
-- Make history and restore simple.
-- Keep the repository format human-inspectable.
+## Current Status
 
-## Current status
-This is the initial scaffold with a Go CLI and Tcl entrypoint placeholder.
+Pino is early, but the foundation is in place:
 
-## CLI (current)
-```bash
+- Go CLI scaffold with `pino init` implemented.
+- Repository bootstrap layout under `.pino/`.
+- Project-local Tcl/Tk 9.0.3 runtime committed under `tcltk/`.
+- Tcl/Tk UI entrypoint and Windows launchers that use the vendored runtime.
+- Product and architecture design in `docs/design.md`.
+
+## Run The CLI
+
+From the repository root:
+
+```powershell
 go run ./cmd/pino init
 ```
 
-## Planned commands
-- `init`
-- `status`
-- `commit`
-- `log`
-- `diff`
-- `restore`
-- `verify`
+The current command set is intentionally small:
+
+```text
+pino init    initialize .pino repository
+pino help    show CLI help
+```
+
+Planned commands are `status`, `commit`, `log`, `diff`, `restore`, and `verify`.
+
+## Run The Tcl UI
+
+The UI launcher uses the runtime in `tcltk/`, so a system Tcl/Tk install is not required on Windows.
+
+```powershell
+.\scripts\pino-ui.cmd
+```
+
+For a smoke test that loads Tcl and Tk without leaving the UI open:
+
+```powershell
+.\scripts\pino-ui.cmd --check
+```
+
+PowerShell users can also run:
+
+```powershell
+pwsh -NoProfile -File .\scripts\pino-ui.ps1
+```
+
+## Repository Model
+
+Pino stores local history in a `.pino/` directory inside the notes folder.
+
+```text
+.pino/
+	HEAD
+	commits/
+	objects/
+	refs/
+		main
+```
+
+The design targets content-addressed objects, full-snapshot commit manifests, and atomic ref updates. The first release should make it possible to initialize a folder, create snapshots, inspect changes, view history, restore files, and verify repository integrity.
+
+## Development
+
+Run tests with:
+
+```powershell
+go test ./...
+```
+
+The Tcl/Tk runtime was built from Tcl/Tk 9.0.3 source with MSYS2 UCRT64 tools in `C:\msys64`. The source tree is not required after installation because the runtime artifacts are committed under `tcltk/`.
+
+## Design
+
+See `docs/design.md` for the product goals, repository format, command behavior, Tcl UI direction, data-safety rules, and implementation milestones.
