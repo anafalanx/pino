@@ -55,6 +55,24 @@ PowerShell users can also run:
 pwsh -NoProfile -File .\scripts\pino-ui.ps1
 ```
 
+For GUI iteration, use the automated harness. It launches the real Tk UI against a temporary workspace, captures stdout, stderr, Tcl diagnostics, a window list, and screenshots under `.pino-dev/gui-check/`, then exits cleanly:
+
+```powershell
+pwsh -NoProfile -File .\scripts\pino-gui-check.ps1
+```
+
+To run the same check through the embedded executable path, rebuilding `pino.exe` first:
+
+```powershell
+pwsh -NoProfile -File .\scripts\pino-gui-check.ps1 -Embedded
+```
+
+To verify that Tcl/Tk dialog-style errors are captured in logs instead of disappearing behind a modal window:
+
+```powershell
+pwsh -NoProfile -File .\scripts\pino-gui-check.ps1 -ExerciseDialogError
+```
+
 ## Repository Model
 
 Pino stores local history in a `.pino/` directory inside the notes folder.
@@ -81,6 +99,8 @@ go test ./...
 The Tcl/Tk runtime was built from Tcl/Tk 9.0.3 source with MSYS2 UCRT64 tools in `C:\msys64`. The source tree is not required after installation because the runtime artifacts are committed under `tcltk/`.
 
 Pino also vendors a minimal subset of Tcllib 2.0 for pure-Tcl SHA-256 and JSON support. App functionality should not depend on host OS utilities.
+
+GUI work should be checked with `scripts/pino-gui-check.ps1` before commit. The harness uses the project runtime, sets a temporary workspace, captures the rendered app window, validates that the screenshot is large and nonblank, and fails if Tcl diagnostics contain errors.
 
 ## Design
 

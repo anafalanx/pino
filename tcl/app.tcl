@@ -1,6 +1,117 @@
 #!/usr/bin/env tclsh
 
-package require Tk
+namespace eval ::pino {
+	variable diagnosticsLog ""
+	variable suppressErrorDialogs 0
+	variable guiReadyFile ""
+	variable guiCheckAutoExitMs 0
+	variable guiCheckExerciseDialogError 0
+	variable guiCheckDone 0
+	variable guiCheckExitCode 0
+	variable guiErrorCount 0
+}
+
+proc ::pino::envValue {name {default ""}} {
+	if {[info exists ::env($name)] && $::env($name) ne ""} {
+		return $::env($name)
+	}
+	return $default
+}
+
+proc ::pino::envFlag {name} {
+	if {![info exists ::env($name)]} {
+		return 0
+	}
+	set value [string tolower [string trim $::env($name)]]
+	expr {$value ni {"" "0" "false" "no" "off"}}
+}
+
+proc ::pino::envInt {name default} {
+	set value [envValue $name ""]
+	if {[string is integer -strict $value] && $value >= 0} {
+		return $value
+	}
+	return $default
+}
+
+proc ::pino::writeDiagnostic {level message {options {}}} {
+	variable diagnosticsLog
+	set timestamp [clock format [clock seconds] -gmt true -format "%Y-%m-%dT%H:%M:%SZ"]
+	set lines [list [format {%s [%s] %s} $timestamp $level $message]]
+	if {[dict exists $options -errorinfo]} {
+		lappend lines [dict get $options -errorinfo]
+	}
+	if {[dict exists $options -errorcode]} {
+		lappend lines "errorCode: [dict get $options -errorcode]"
+	}
+	set text [join $lines "\n"]
+	catch {
+		puts stderr $text
+		flush stderr
+	}
+	if {$diagnosticsLog ne ""} {
+		catch {
+			file mkdir [file dirname $diagnosticsLog]
+			set handle [open $diagnosticsLog a]
+			fconfigure $handle -encoding utf-8 -translation lf
+			puts $handle $text
+			close $handle
+		}
+	}
+}
+
+proc ::pino::showErrorDialog {title message} {
+	variable suppressErrorDialogs
+	if {$suppressErrorDialogs || [llength [info commands tk_messageBox]] == 0} {
+		return
+	}
+	catch {tk_messageBox -icon error -type ok -title $title -message $message}
+}
+
+proc ::pino::reportError {context message options} {
+	variable guiErrorCount
+	incr guiErrorCount
+	writeDiagnostic ERROR "$context: $message" $options
+}
+
+proc ::pino::fatalError {context message options} {
+	reportError $context $message $options
+	showErrorDialog "Pino Error" "$context: $message"
+	exit 1
+}
+
+proc ::pino::requirePackage {name} {
+	if {[catch {package require $name} result options]} {
+		fatalError "Load package $name" $result $options
+	}
+	return $result
+}
+
+proc bgerror {message} {
+	set options [dict create]
+	if {[info exists ::errorInfo]} {
+		dict set options -errorinfo $::errorInfo
+	}
+	if {[info exists ::errorCode]} {
+		dict set options -errorcode $::errorCode
+	}
+	::pino::reportError "Tk background error" $message $options
+	::pino::showErrorDialog "Pino Error" $message
+}
+
+proc ::pino::setupDiagnostics {} {
+	variable diagnosticsLog [envValue PINO_DIAGNOSTICS_LOG]
+	variable suppressErrorDialogs [expr {[envFlag PINO_NO_ERROR_DIALOGS] || [envFlag PINO_SUPPRESS_ERROR_DIALOGS]}]
+	variable guiReadyFile [envValue PINO_GUI_READY_FILE]
+	variable guiCheckAutoExitMs [envInt PINO_GUI_AUTO_EXIT_MS 0]
+	variable guiCheckExerciseDialogError [envFlag PINO_GUI_EXERCISE_DIALOG_ERROR]
+	if {$diagnosticsLog ne ""} {
+		writeDiagnostic INFO "Diagnostics started"
+	}
+}
+
+::pino::setupDiagnostics
+::pino::requirePackage Tk
 
 namespace eval ::pino {
 	variable appDir [file normalize [file dirname [info script]]]
@@ -34,9 +145,9 @@ namespace eval ::pino {
 	variable commitButton ""
 }
 
-package require sha256
-package require json
-package require json::write
+::pino::requirePackage sha256
+::pino::requirePackage json
+::pino::requirePackage json::write
 
 proc ::pino::hasArg {name} {
 	expr {[lsearch -exact $::argv $name] >= 0}
@@ -476,6 +587,64 @@ proc ::pino::refresh {} {
 	}
 }
 
+proc ::pino::writeGuiReady {} {
+	variable guiReadyFile
+	variable workspace
+	wm deiconify .
+	raise .
+	update
+	set geometry [wm geometry .]
+	set width [winfo width .]
+	set height [winfo height .]
+	if {$width < 200 || $height < 200} {
+		after 100 ::pino::writeGuiReady
+		return
+	}
+	writeDiagnostic INFO "GUI ready: $geometry"
+	if {$guiReadyFile eq ""} {
+		return
+	}
+	set data [join [list \
+		"ready 1" \
+		"pid [pid]" \
+		"title [wm title .]" \
+		"geometry $geometry" \
+		"width $width" \
+		"height $height" \
+		"workspace $workspace"] "\n"]
+	append data "\n"
+	if {[catch {writeTextFile $guiReadyFile $data} result options]} {
+		reportError "Write GUI ready file" $result $options
+	}
+}
+
+proc ::pino::finishGuiCheck {} {
+	variable guiErrorCount
+	variable guiCheckDone
+	variable guiCheckExitCode
+	set guiCheckExitCode [expr {$guiErrorCount > 0 ? 2 : 0}]
+	set guiCheckDone 1
+}
+
+proc ::pino::startGuiAutomation {} {
+	variable guiReadyFile
+	variable guiCheckAutoExitMs
+	variable guiCheckExerciseDialogError
+	if {$guiReadyFile ne "" || [hasArg "--gui-check"]} {
+		after idle ::pino::writeGuiReady
+	}
+	if {![hasArg "--gui-check"]} {
+		return
+	}
+	if {$guiCheckAutoExitMs <= 0} {
+		set guiCheckAutoExitMs 1200
+	}
+	if {$guiCheckExerciseDialogError || [hasArg "--dialog-error-check"]} {
+		after 100 {error "Pino dialog capture check"}
+	}
+	after $guiCheckAutoExitMs ::pino::finishGuiCheck
+}
+
 if {[::pino::hasArg "--check"]} {
 	puts "Pino UI runtime OK"
 	puts "Tcl [info patchlevel]"
@@ -505,9 +674,10 @@ if {[::pino::hasArg "--repo-check"]} {
 
 wm title . "Pino"
 wm minsize . 880 560
+wm geometry . 1000x680
 catch {ttk::style theme use vista}
 
-ttk::style configure Pino.Title.TLabel -font {Segoe UI 16 bold}
+ttk::style configure Pino.Title.TLabel -font {{Segoe UI} 16 bold}
 ttk::style configure Pino.Meta.TLabel -foreground #555555
 ttk::style configure Pino.Sidebar.TLabel -foreground #555555
 ttk::style configure Pino.Primary.TButton -padding {14 7}
@@ -617,3 +787,10 @@ grid $main.rule -row 2 -column 0 -sticky ew -pady {0 12}
 grid $body -row 3 -column 0 -sticky nsew
 
 ::pino::refresh
+::pino::startGuiAutomation
+
+if {[::pino::hasArg "--gui-check"]} {
+	vwait ::pino::guiCheckDone
+	catch {destroy .}
+	exit $::pino::guiCheckExitCode
+}

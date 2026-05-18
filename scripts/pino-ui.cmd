@@ -24,6 +24,8 @@ if "%~1"=="--check" (
   "%PINO_TCLSH%" "%PINO_APP%" %*
 ) else if "%~1"=="--repo-check" (
   "%PINO_TCLSH%" "%PINO_APP%" %*
+) else if "%~1"=="--gui-check" (
+  "%PINO_TCLSH%" "%PINO_APP%" %*
 ) else (
   "%PINO_WISH%" "%PINO_APP%" %*
 )

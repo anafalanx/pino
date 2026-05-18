@@ -26,7 +26,7 @@ if (!$env:PINO_WORKSPACE) {
 $env:PATH = "$runtimeBin;$env:PATH"
 
 $launcher = $wish
-if ($args -contains "--check" -or $args -contains "--repo-check") {
+if ($args -contains "--check" -or $args -contains "--repo-check" -or $args -contains "--gui-check") {
     $launcher = $tclsh
 }
 

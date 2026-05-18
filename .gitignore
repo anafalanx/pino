@@ -1,3 +1,4 @@
 pino.code-workspace
 pino.exe
 .pino/
+.pino-dev/
