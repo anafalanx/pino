@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anafalanx/pino/internal/cli"
+	"github.com/anafalanx/pino/internal/launcher"
 )
 
 func main() {
-	if err := cli.Run(os.Args[1:]); err != nil {
+	if err := launcher.Run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

@@ -6,32 +6,37 @@ Pino is a local-first plain-text version control system for notes. It is aimed a
 
 Pino is early, but the foundation is in place:
 
-- Go CLI scaffold with `pino init` implemented.
+- Go application shell that embeds the Tcl source and Tcl/Tk runtime into one executable.
 - Repository bootstrap layout under `.pino/`.
-- Project-local Tcl/Tk 9.0.3 runtime committed under `tcltk/`.
-- Tcl/Tk UI entrypoint and Windows launchers that use the vendored runtime.
+- Project-local Tcl/Tk 9.0.3 runtime committed under `tcltk/` and embedded by the Go shell.
+- Tcl/Tk UI that opens on the current workspace, initializes `.pino`, and shows working files.
 - Product and architecture design in `docs/design.md`.
 
-## Run The CLI
+## Run The App
 
 From the repository root:
 
 ```powershell
-go run ./cmd/pino init
+go run ./cmd/pino
 ```
 
-The current command set is intentionally small:
+For a smoke test that loads the embedded Tcl/Tk runtime without leaving the UI open:
 
-```text
-pino init    initialize .pino repository
-pino help    show CLI help
+```powershell
+go run ./cmd/pino --check
 ```
 
-Planned commands are `status`, `commit`, `log`, `diff`, `restore`, and `verify`.
+To build a single executable:
 
-## Run The Tcl UI
+```powershell
+go build -o pino.exe ./cmd/pino
+```
 
-The UI launcher uses the runtime in `tcltk/`, so a system Tcl/Tk install is not required on Windows.
+The executable materializes its embedded `tcl/` and `tcltk/` files into the user cache, then starts the Tcl/Tk app from there. The current Go role is packaging and launching; product behavior lives in Tcl for now. Later releases may move repository functionality into Go once the app model settles.
+
+## Source Launchers
+
+The source-tree launchers are still useful during Tcl UI development. They use the checked-out runtime in `tcltk/`, so a system Tcl/Tk install is not required on Windows.
 
 ```powershell
 .\scripts\pino-ui.cmd
@@ -62,7 +67,7 @@ Pino stores local history in a `.pino/` directory inside the notes folder.
 		main
 ```
 
-The design targets content-addressed objects, full-snapshot commit manifests, and atomic ref updates. The first release should make it possible to initialize a folder, create snapshots, inspect changes, view history, restore files, and verify repository integrity.
+The app can currently initialize that layout from the Tcl UI. The design targets content-addressed objects, full-snapshot commit manifests, and atomic ref updates. The first release should make it possible to create snapshots, inspect changes, view history, restore files, and verify repository integrity.
 
 ## Development
 

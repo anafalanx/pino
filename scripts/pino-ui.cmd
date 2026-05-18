@@ -7,6 +7,7 @@ set "PINO_RUNTIME_BIN=%PINO_TCLTK%\bin"
 set "PINO_WISH=%PINO_RUNTIME_BIN%\wish90.exe"
 set "PINO_TCLSH=%PINO_RUNTIME_BIN%\tclsh90.exe"
 set "PINO_APP=%PINO_ROOT%\tcl\app.tcl"
+set "PINO_WORKSPACE=%CD%"
 
 if not exist "%PINO_WISH%" (
   >&2 echo Pino UI runtime not found: %PINO_WISH%

@@ -2,7 +2,7 @@
 
 Pino is a local-first plain-text version control system for notes. It is optimized for writers who want confidence that their work is preserved without needing to learn or operate a full software-development VCS.
 
-The first implementation is a Go command-line tool with a Tcl entrypoint reserved for a small desktop UI. The repository format should stay simple enough to inspect and repair with a text editor and ordinary filesystem tools.
+The first implementation is a Go-built desktop app shell around a Tcl/Tk application. Go currently embeds the Tcl/Tk runtime and Tcl source into a single executable, materializes those assets at startup, and launches the Tcl app. Repository behavior can live in Tcl while the interaction model is young; later, stable functionality may move into Go. The repository format should stay simple enough to inspect and repair with a text editor and ordinary filesystem tools.
 
 ## Product Goals
 
@@ -37,13 +37,15 @@ Pino should make the safe action obvious:
 
 ## Current State
 
-The current repository contains the initial scaffold:
+The current repository contains the initial app scaffold:
 
-- `cmd/pino/main.go` runs the CLI.
-- `internal/cli/run.go` dispatches commands and implements `init`.
-- `internal/repo/init.go` creates the `.pino` directory layout.
+- `cmd/pino/main.go` starts the embedded app launcher.
+- `assets.go` embeds `tcl/` and `tcltk/` into the Go executable.
+- `internal/launcher/run.go` materializes the embedded runtime and starts the Tcl app.
+- `internal/cli/run.go` and `internal/repo/init.go` remain as early Go experiments for possible future repository logic.
 - `internal/repo/init_test.go` verifies the bootstrap layout.
-- `tcl/app.tcl` is a placeholder for a future Tcl UI.
+- `tcl/app.tcl` is the Tcl/Tk app shell. It opens on the current workspace, can initialize `.pino`, and displays working files.
+- `tcltk/` contains the committed Tcl/Tk 9.0.3 runtime.
 
 The implemented `.pino` layout is:
 
@@ -67,25 +69,27 @@ The implemented `.pino` layout is:
 
 ## Architecture
 
-Pino is split into three layers:
+Pino is currently split into three layers:
 
-1. CLI layer
-	- Parses arguments.
-	- Formats command output.
-	- Converts user input into repository operations.
+1. Go launcher layer
+	- Embeds `tcl/` and `tcltk/` into one executable.
+	- Extracts embedded files into a versioned user-cache directory.
+	- Starts `wish90.exe` or `tclsh90.exe --check` from the embedded runtime.
+	- Passes workspace and runtime paths through environment variables.
 
-2. Repository layer
+2. Tcl application layer
+	- Owns the desktop UI.
+	- Starts with workspace selection, repository initialization, file listing, and history placeholders.
+	- Can implement early repository behavior directly while the product shape is still changing.
+
+3. Repository layer
 	- Owns `.pino` layout and file IO.
 	- Computes file snapshots.
 	- Writes and reads objects, commits, and refs.
 	- Performs integrity checks.
+	- May begin in Tcl and move to Go when the behavior becomes stable.
 
-3. UI layer
-	- Starts as a Tcl entrypoint.
-	- Should call the CLI or a stable command protocol at first.
-	- Can later move to direct library integration if needed.
-
-The repository layer should remain free of terminal formatting and UI concerns.
+The repository layer should remain free of widget and presentation concerns no matter which language hosts it.
 
 ## Repository Format
 
@@ -263,7 +267,7 @@ Verification should include:
 
 ## Tcl UI Direction
 
-The Tcl UI should be a thin local interface over the same model as the CLI. The first useful UI can provide:
+The Tcl UI is the actual app surface for the first phase. It should keep repository behavior small and explicit until the workflows feel right. The first useful UI can provide:
 
 - Repository status overview.
 - Commit message entry and commit button.
@@ -271,9 +275,7 @@ The Tcl UI should be a thin local interface over the same model as the CLI. The 
 - File change list.
 - Restore action with confirmation.
 
-The UI should not introduce its own repository logic. It should either invoke `pino` commands and parse stable output or call a small machine-readable command mode added to the CLI.
-
-A future `--json` flag for read operations would make the Tcl UI simpler and more reliable.
+Once behavior stabilizes, Go can take over lower-level repository operations behind a stable boundary. Until then, Tcl may own simple operations such as repository initialization and workspace scanning.
 
 ## Error Handling
 

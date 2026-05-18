@@ -20,6 +20,7 @@ if (!(Test-Path -LiteralPath $app)) {
 
 $env:PINO_ROOT = $root
 $env:PINO_TCLTK = $runtime
+$env:PINO_WORKSPACE = (Get-Location).Path
 $env:PATH = "$runtimeBin;$env:PATH"
 
 $launcher = $wish
